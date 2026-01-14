@@ -13,9 +13,9 @@
 
 ## Scripts
 
-`SKILL.md` referencia um diretorio `scripts/`, mas ele nao esta presente.
-Se voce adicionar scripts, coloque-os em `scripts/` e mantenha exemplos
-minimos em `SKILL.md`, apontando para a implementacao completa.
+- `scripts/test_api.py` - Teste rapido da API Shopee com assinatura SHA256.
+- Se voce adicionar novos scripts, mantenha exemplos minimos em `SKILL.md`,
+  apontando para a implementacao completa em `scripts/`.
 
 ## Atualizacao de docs
 
