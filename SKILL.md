@@ -39,9 +39,7 @@ Diferença máxima de 10 minutos com o servidor
 ## Scripts disponíveis
 
 ### Python
-- `scripts/shopee_client.py` - Cliente Python com autenticação SHA256
-- `scripts/telegram_bot.py` - Bot Telegram para envio de ofertas
-- `scripts/webhook_handler.py` - Handler para webhooks N8N
+- `scripts/test_api.py` - Smoke test da API com assinatura SHA256
 
 ### N8N
 - `references/n8n-workflows.json` - Workflows prontos para importar
@@ -88,6 +86,7 @@ Implementação completa: `scripts/telegram_bot.py`
 ## Referências
 
 - `references/api-endpoints.md` - Documentação detalhada dos endpoints
+- `references/api-test.md` - Passo a passo para smoke test
 - `references/graphql-queries.md` - Biblioteca de queries prontas
 - `references/categories.md` - IDs de categorias
 - `references/use-cases.md` - Casos de uso prontos
