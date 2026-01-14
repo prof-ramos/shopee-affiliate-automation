@@ -1,4 +1,4 @@
-# Repository Guidelines
+# Diretrizes do Repositorio
 
 ## Estrutura do Projeto e Organizacao de Modulos
 
