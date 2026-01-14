@@ -1,0 +1,19 @@
+# Shopee Affiliate Automation - Python Dependencies
+
+# Core dependencies
+requests>=2.31.0
+python-dotenv>=1.0.0
+
+# Telegram Bot
+aiogram>=3.3.0
+
+# Web Framework (webhook handler)
+flask>=3.0.0
+gunicorn>=21.2.0
+
+# Utilities
+python-dateutil>=2.8.2
+
+# Development
+pytest>=7.4.0
+black>=23.12.0

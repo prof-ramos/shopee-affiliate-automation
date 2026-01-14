@@ -1,0 +1,481 @@
+{
+  "name": "Shopee Affiliate Workflows",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "When clicking 'Test workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "id": "workflow-1-trigger"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Configuração Shopee\nconst appId = $env.SHOPEE_APP_ID;\nconst secret = $env.SHOPEE_SECRET;\nconst baseUrl = 'https://open-api.affiliate.shopee.com.br/graphql';\n\n// Query GraphQL\nconst query = `\nquery {\n  productOfferV2(keyword: \"smartphone\", sortType: 5, page: 1, limit: 10) {\n    nodes {\n      itemId\n      productName\n      commissionRate\n      priceMin\n      priceMax\n      imageUrl\n      offerLink\n    }\n  }\n}\n`;\n\nconst payload = { query };\nconst payloadStr = JSON.stringify(payload);\nconst timestamp = Math.floor(Date.now() / 1000).toString();\n\n// Calcular assinatura SHA256\nconst crypto = require('crypto');\nconst signFactor = `${appId}${timestamp}${payloadStr}${secret}`;\nconst signature = crypto.createHash('sha256').update(signFactor).digest('hex');\n\n// Retornar dados para HTTP Request\nreturn {\n  json: {\n    url: baseUrl,\n    headers: {\n      'Authorization': `SHA256 Credential=${appId}, Timestamp=${timestamp}, Signature=${signature}`,\n      'Content-Type': 'application/json'\n    },\n    body: payload\n  }\n};"
+      },
+      "name": "Calcular Assinatura Shopee",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "id": "workflow-1-function"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$json.url}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{$json.headers.Authorization}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "={{$json.headers['Content-Type']}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": []
+        },
+        "jsonBody": "={{JSON.stringify($json.body)}}",
+        "options": {}
+      },
+      "name": "HTTP Request Shopee API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [650, 300],
+      "id": "workflow-1-http"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Processar resposta da API\nconst response = $input.item.json;\n\nif (response.errors) {\n  throw new Error(`Shopee API Error: ${JSON.stringify(response.errors)}`);\n}\n\nconst products = response.data.productOfferV2.nodes;\n\nreturn products.map(product => ({\n  json: {\n    itemId: product.itemId,\n    name: product.productName,\n    commission: product.commissionRate,\n    priceMin: product.priceMin,\n    priceMax: product.priceMax,\n    imageUrl: product.imageUrl,\n    offerLink: product.offerLink\n  }\n}));"
+      },
+      "name": "Processar Produtos",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [850, 300],
+      "id": "workflow-1-process"
+    }
+  ],
+  "connections": {
+    "When clicking 'Test workflow'": {
+      "main": [
+        [
+          {
+            "node": "Calcular Assinatura Shopee",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calcular Assinatura Shopee": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request Shopee API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request Shopee API": {
+      "main": [
+        [
+          {
+            "node": "Processar Produtos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "workflow_description": "Workflow básico para buscar produtos da Shopee e processar resultados"
+}
+
+---
+
+# WORKFLOW 2: Buscar Ofertas e Enviar para Telegram
+
+{
+  "name": "Shopee to Telegram",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "name": "Schedule Trigger (a cada 6h)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "id": "workflow-2-trigger"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Buscar top ofertas com alta comissão\nconst appId = $env.SHOPEE_APP_ID;\nconst secret = $env.SHOPEE_SECRET;\nconst baseUrl = 'https://open-api.affiliate.shopee.com.br/graphql';\n\nconst query = `\nquery {\n  productOfferV2(sortType: 5, page: 1, limit: 20) {\n    nodes {\n      itemId\n      productName\n      commissionRate\n      priceMin\n      priceMax\n      sales\n      ratingStar\n      imageUrl\n      offerLink\n    }\n  }\n}\n`;\n\nconst payload = { query };\nconst payloadStr = JSON.stringify(payload);\nconst timestamp = Math.floor(Date.now() / 1000).toString();\n\nconst crypto = require('crypto');\nconst signFactor = `${appId}${timestamp}${payloadStr}${secret}`;\nconst signature = crypto.createHash('sha256').update(signFactor).digest('hex');\n\nreturn {\n  json: {\n    url: baseUrl,\n    headers: {\n      'Authorization': `SHA256 Credential=${appId}, Timestamp=${timestamp}, Signature=${signature}`,\n      'Content-Type': 'application/json'\n    },\n    body: payload\n  }\n};"
+      },
+      "name": "Preparar Query",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "id": "workflow-2-prepare"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$json.url}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{$json.headers.Authorization}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "={{$json.headers['Content-Type']}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "jsonBody": "={{JSON.stringify($json.body)}}",
+        "options": {}
+      },
+      "name": "Buscar Produtos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [650, 300],
+      "id": "workflow-2-fetch"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Filtrar produtos com comissão > 8%\nconst response = $input.item.json;\nconst products = response.data.productOfferV2.nodes;\n\nconst filtered = products.filter(p => p.commissionRate > 8.0);\n\nreturn filtered.map(product => ({\n  json: product\n}));"
+      },
+      "name": "Filtrar Alta Comissão",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [850, 300],
+      "id": "workflow-2-filter"
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "name": "Split In Batches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 1,
+      "position": [1050, 300],
+      "id": "workflow-2-split"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Gerar link curto para cada produto\nconst appId = $env.SHOPEE_APP_ID;\nconst secret = $env.SHOPEE_SECRET;\nconst baseUrl = 'https://open-api.affiliate.shopee.com.br/graphql';\nconst product = $input.item.json;\n\nconst query = `\nmutation {\n  generateShortLink(input: {\n    originUrl: \"${product.offerLink}\"\n    subIds: [\"telegram\", \"n8n\", \"auto\", \"\", \"\"]\n  }) {\n    shortLink\n  }\n}\n`;\n\nconst payload = { query };\nconst payloadStr = JSON.stringify(payload);\nconst timestamp = Math.floor(Date.now() / 1000).toString();\n\nconst crypto = require('crypto');\nconst signFactor = `${appId}${timestamp}${payloadStr}${secret}`;\nconst signature = crypto.createHash('sha256').update(signFactor).digest('hex');\n\nreturn {\n  json: {\n    product: product,\n    url: baseUrl,\n    headers: {\n      'Authorization': `SHA256 Credential=${appId}, Timestamp=${timestamp}, Signature=${signature}`,\n      'Content-Type': 'application/json'\n    },\n    body: payload\n  }\n};"
+      },
+      "name": "Gerar Link Curto",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1250, 300],
+      "id": "workflow-2-genlink"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$json.url}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{$json.headers.Authorization}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "={{$json.headers['Content-Type']}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "jsonBody": "={{JSON.stringify($json.body)}}",
+        "options": {}
+      },
+      "name": "Request Link Curto",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1450, 300],
+      "id": "workflow-2-reqlink"
+    },
+    {
+      "parameters": {
+        "chatId": "={{$env.TELEGRAM_CHAT_ID}}",
+        "text": "=🛍️ *{{$json.product.productName}}*\\n\\n💰 Preço: R$ {{$json.product.priceMin}}\\n📊 Comissão: {{$json.product.commissionRate}}%\\n⭐ Avaliação: {{$json.product.ratingStar}}/5\\n🔥 Vendas: {{$json.product.sales}}\\n\\n🔗 {{$json.data.generateShortLink.shortLink}}",
+        "parseMode": "Markdown",
+        "additionalFields": {}
+      },
+      "name": "Enviar para Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [1650, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "1",
+          "name": "Telegram account"
+        }
+      },
+      "id": "workflow-2-telegram"
+    }
+  ],
+  "connections": {
+    "Schedule Trigger (a cada 6h)": {
+      "main": [
+        [
+          {
+            "node": "Preparar Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Query": {
+      "main": [
+        [
+          {
+            "node": "Buscar Produtos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Produtos": {
+      "main": [
+        [
+          {
+            "node": "Filtrar Alta Comissão",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtrar Alta Comissão": {
+      "main": [
+        [
+          {
+            "node": "Split In Batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split In Batches": {
+      "main": [
+        [
+          {
+            "node": "Gerar Link Curto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gerar Link Curto": {
+      "main": [
+        [
+          {
+            "node": "Request Link Curto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Request Link Curto": {
+      "main": [
+        [
+          {
+            "node": "Enviar para Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar para Telegram": {
+      "main": [
+        [
+          {
+            "node": "Split In Batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "workflow_description": "Workflow automatizado que busca ofertas de alta comissão a cada 6h e envia para canal Telegram"
+}
+
+---
+
+# WORKFLOW 3: Relatório de Comissões por Email
+
+{
+  "name": "Shopee Commission Report",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1
+            }
+          ]
+        },
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 9,
+              "minute": 0
+            }
+          ]
+        }
+      },
+      "name": "Schedule Trigger (diário 9h)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "id": "workflow-3-trigger"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Relatório de conversão últimos 7 dias\nconst appId = $env.SHOPEE_APP_ID;\nconst secret = $env.SHOPEE_SECRET;\nconst baseUrl = 'https://open-api.affiliate.shopee.com.br/graphql';\n\nconst now = Math.floor(Date.now() / 1000);\nconst weekAgo = now - (7 * 86400);\n\nconst query = `\nquery {\n  conversionReport(\n    purchaseTimeStart: ${weekAgo}\n    purchaseTimeEnd: ${now}\n    page: 1\n    limit: 500\n  ) {\n    nodes {\n      orderId\n      commissionAmount\n      orderStatus\n      productName\n      subIds\n    }\n    pageInfo {\n      hasNextPage\n    }\n  }\n}\n`;\n\nconst payload = { query };\nconst payloadStr = JSON.stringify(payload);\nconst timestamp = Math.floor(Date.now() / 1000).toString();\n\nconst crypto = require('crypto');\nconst signFactor = `${appId}${timestamp}${payloadStr}${secret}`;\nconst signature = crypto.createHash('sha256').update(signFactor).digest('hex');\n\nreturn {\n  json: {\n    url: baseUrl,\n    headers: {\n      'Authorization': `SHA256 Credential=${appId}, Timestamp=${timestamp}, Signature=${signature}`,\n      'Content-Type': 'application/json'\n    },\n    body: payload\n  }\n};"
+      },
+      "name": "Preparar Relatório",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "id": "workflow-3-prepare"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$json.url}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{$json.headers.Authorization}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "={{$json.headers['Content-Type']}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "jsonBody": "={{JSON.stringify($json.body)}}",
+        "options": {}
+      },
+      "name": "Buscar Conversões",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [650, 300],
+      "id": "workflow-3-fetch"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Processar estatísticas\nconst response = $input.item.json;\nconst orders = response.data.conversionReport.nodes;\n\nconst totalCommission = orders.reduce((sum, o) => sum + parseFloat(o.commissionAmount), 0);\nconst totalOrders = orders.length;\n\nconst byStatus = {};\norders.forEach(o => {\n  if (!byStatus[o.orderStatus]) {\n    byStatus[o.orderStatus] = { count: 0, total: 0 };\n  }\n  byStatus[o.orderStatus].count++;\n  byStatus[o.orderStatus].total += parseFloat(o.commissionAmount);\n});\n\nconst byChannel = {};\norders.forEach(o => {\n  const channel = o.subIds[0] || 'desconhecido';\n  if (!byChannel[channel]) {\n    byChannel[channel] = { count: 0, total: 0 };\n  }\n  byChannel[channel].count++;\n  byChannel[channel].total += parseFloat(o.commissionAmount);\n});\n\nreturn {\n  json: {\n    period: '7 dias',\n    totalCommission: totalCommission.toFixed(2),\n    totalOrders: totalOrders,\n    avgCommission: (totalCommission / totalOrders).toFixed(2),\n    byStatus: byStatus,\n    byChannel: byChannel,\n    topProducts: orders.slice(0, 10)\n  }\n};"
+      },
+      "name": "Calcular Estatísticas",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [850, 300],
+      "id": "workflow-3-stats"
+    },
+    {
+      "parameters": {
+        "fromEmail": "noreply@seudominio.com",
+        "toEmail": "={{$env.REPORT_EMAIL}}",
+        "subject": "Relatório Shopee - Últimos 7 Dias",
+        "emailFormat": "html",
+        "html": "=<h2>Relatório de Comissões Shopee</h2><p><strong>Período:</strong> {{$json.period}}</p><h3>Resumo</h3><ul><li>Total de Pedidos: {{$json.totalOrders}}</li><li>Total em Comissões: R$ {{$json.totalCommission}}</li><li>Comissão Média: R$ {{$json.avgCommission}}</li></ul><h3>Por Status</h3><pre>{{JSON.stringify($json.byStatus, null, 2)}}</pre><h3>Por Canal</h3><pre>{{JSON.stringify($json.byChannel, null, 2)}}</pre>",
+        "options": {}
+      },
+      "name": "Enviar Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1050, 300],
+      "credentials": {
+        "smtp": {
+          "id": "1",
+          "name": "SMTP account"
+        }
+      },
+      "id": "workflow-3-email"
+    }
+  ],
+  "connections": {
+    "Schedule Trigger (diário 9h)": {
+      "main": [
+        [
+          {
+            "node": "Preparar Relatório",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Relatório": {
+      "main": [
+        [
+          {
+            "node": "Buscar Conversões",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Conversões": {
+      "main": [
+        [
+          {
+            "node": "Calcular Estatísticas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calcular Estatísticas": {
+      "main": [
+        [
+          {
+            "node": "Enviar Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "workflow_description": "Workflow que gera relatório diário de comissões e envia por email"
+}
